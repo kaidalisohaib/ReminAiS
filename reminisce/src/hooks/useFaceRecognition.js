@@ -33,7 +33,7 @@ export const useFaceRecognition = () => {
                     emotion: memoryData.emotion,
                     transcript: memoryData.transcript || memoryData.summary // Fallback
                 };
-                const newHistory = [...(p.history || []), newEntry].slice(-5);
+                const newHistory = [...(p.history || []), newEntry];
                 return { ...p, history: newHistory };
             }
             return p;

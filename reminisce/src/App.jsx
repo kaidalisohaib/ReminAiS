@@ -6,17 +6,24 @@ import { useFaceRecognition } from './hooks/useFaceRecognition';
 import { useGemini } from './hooks/useGemini';
 import AdminPanel from './components/AdminPanel';
 import PatientHUD from './components/PatientHUD';
+import LoginScreen from './components/LoginScreen';
+import Dashboard from './components/Dashboard';
+import Sidebar from './components/Sidebar';
+import Connections from './components/Connections';
+import ConnectionHistory from './components/ConnectionHistory';
 import './index.css';
 
 function App() {
   // --- STATE ---
-  const [mode, setMode] = useState('ADMIN');
+  // Modes: LOGIN, DASHBOARD, CAMERA, ADMIN, CONNECTIONS, HISTORY
+  const [mode, setMode] = useState('LOGIN');
+  const [showMenu, setShowMenu] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState(null);
 
   // Patient State
   const [currentFace, setCurrentFace] = useState(null);
   const [lastEmotion, setLastEmotion] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  // Removed lastGreetingTime state
 
   // --- HOOKS ---
   const {
@@ -55,7 +62,7 @@ function App() {
     if (!browserSupportsSpeechRecognition) return;
     resetTranscript();
     setIsRecording(true);
-
+    console.log("🎤 START RECORDING", browserSupportsContinuousListening);
     if (browserSupportsContinuousListening) {
       SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
     } else {
@@ -84,7 +91,7 @@ function App() {
       );
       const audio = new Audio(URL.createObjectURL(response.data));
       audio.onended = () => {
-        if (mode === 'PATIENT' && currentFaceRef.current) {
+        if (mode === 'CAMERA' && currentFaceRef.current) {
           SpeechRecognition.startListening({ continuous: true });
         }
       };
@@ -114,9 +121,7 @@ function App() {
       // Removed time check
       const person = knownFaces.find(p => p.name === name);
       const lastMood = person?.history?.slice(-1)[0]?.emotion || "Neutral";
-      const context = person?.history?.map(h => h.summary).join(". ") || "";
-
-      const greeting = await getGreeting(name, context, lastMood, imageSrc);
+      const greeting = await getGreeting(name, person?.bio, person?.history, lastMood, imageSrc);
       speak(greeting);
 
       // 4. Start Listening
@@ -158,7 +163,7 @@ function App() {
 
   // --- LOOP ---
   useEffect(() => {
-    if (mode === 'PATIENT' && modelsLoaded) {
+    if (mode === 'CAMERA' && modelsLoaded) {
       recognitionInterval.current = setInterval(async () => {
         if (webcamRef.current && !processingRef.current) {
           processingRef.current = true;
@@ -185,12 +190,67 @@ function App() {
     return () => clearInterval(recognitionInterval.current);
   }, [mode, modelsLoaded, knownFaces, isRecording]);
 
-  // --- RENDER ---
-  return (
-    <div className="container">
-      {!modelsLoaded && <div className="loading">Initializing Neural Engine...</div>}
+  // --- NAVIGATION ---
+  const handleNavigate = (newMode) => {
+    setMode(newMode);
+    setShowMenu(false);
+  };
 
-      {modelsLoaded && mode === 'ADMIN' && (
+  // --- RENDER ---
+  if (!modelsLoaded) return <div className="loading">Initializing Neural Engine...</div>;
+
+  return (
+    <div className="w-full h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+      {mode === 'LOGIN' && (
+        <LoginScreen onLogin={() => setMode('DASHBOARD')} />
+      )}
+
+      {mode === 'DASHBOARD' && (
+        <Dashboard
+          user="Pierre"
+          connections={knownFaces}
+          onOpenMenu={() => setShowMenu(true)}
+          onCamera={() => setMode('CAMERA')}
+          onSelectPerson={(person) => {
+            setSelectedPerson(person);
+            setMode('HISTORY');
+          }}
+        />
+      )}
+
+      {mode === 'CONNECTIONS' && (
+        <Connections
+          connections={knownFaces}
+          onOpenMenu={() => setShowMenu(true)}
+          onCamera={() => setMode('CAMERA')}
+          onSelectPerson={(person) => {
+            setSelectedPerson(person);
+            setMode('HISTORY');
+          }}
+        />
+      )}
+
+      {mode === 'HISTORY' && (
+        <ConnectionHistory
+          person={selectedPerson}
+          onOpenMenu={() => setShowMenu(true)}
+          onCamera={() => setMode('CAMERA')}
+          onBack={() => setMode('DASHBOARD')} // Or previous mode, simplify to Dashboard for now
+        />
+      )}
+
+      {mode === 'CAMERA' && (
+        <PatientHUD
+          webcamRef={webcamRef}
+          currentFace={currentFace}
+          lastEmotion={lastEmotion}
+          transcript={transcript}
+          listening={listening}
+          setMode={setMode} // Allows exiting via secret button
+        />
+      )}
+
+      {mode === 'ADMIN' && (
         <AdminPanel
           webcamRef={webcamRef}
           knownFaces={knownFaces}
@@ -199,14 +259,11 @@ function App() {
         />
       )}
 
-      {modelsLoaded && mode === 'PATIENT' && (
-        <PatientHUD
-          webcamRef={webcamRef}
-          currentFace={currentFace}
-          lastEmotion={lastEmotion}
-          transcript={transcript}
-          listening={listening}
-          setMode={setMode}
+      {/* Sidebar Overlay */}
+      {showMenu && (
+        <Sidebar
+          onClose={() => setShowMenu(false)}
+          onNavigate={handleNavigate}
         />
       )}
     </div>

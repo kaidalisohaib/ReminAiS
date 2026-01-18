@@ -3,21 +3,41 @@ import { GoogleGenAI, Type } from '@google/genai';
 export const useGemini = () => {
 
     // 1. GENERATE GREETING
-    const getGreeting = async (name, context, lastMood, imageBase64) => {
+    const getGreeting = async (name, bio, history, lastMood, imageBase64) => {
         try {
             const cleanImage = imageBase64.split(',')[1];
             const apiKey = import.meta.env.VITE_GEMINI_KEY;
             const ai = new GoogleGenAI({ apiKey });
 
+            // specific formatting for history
+            const historyText = history && history.length > 0
+                ? history.map(h => `[${new Date(h.date).toLocaleDateString()} ${new Date(h.date).toLocaleTimeString()}]: ${h.summary} (Emotion: ${h.emotion})`).join('\n')
+                : "No previous history.";
+
             const prompt = `
                 You are a memory aid for a dementia patient. The patient is holding this device.
                 You see ${name} in the camera.
-                History: ${name} was feeling ${lastMood} last time.
                 
-                Task: Address the *patient* (the user).
-                Tell them who is here (${name}) and offer a gentle reminder of who they are or how they felt last time.
-                Do NOT say "Hello ${name}". Say "Look, it's ${name}..." or "Your friend ${name} is here...".
-                Keep it warm and short (1 sentence).
+                **Person Details:**
+                - Name: ${name}
+                - Relationship/Bio: ${bio || "Unknown"}
+                
+                **Recent Interaction History:**
+                ${historyText}
+                
+                **Current Context:**
+                - Last Obsvered Emotion: ${lastMood}
+                
+                **Task:**
+                Address the *patient* (the user) directly.
+                1. Tell them who is here ("Look, it's [Name]...").
+                2. Remind them of their relationship (from Bio).
+                3. Gently mention a topic from their last conversation if available, referencing *when* it happened (e.g. "Last time you saw them on [Date]...").
+                
+                **Constraints:**
+                - Do NOT say "Hello ${name}".
+                - Keep it warm, reassuring, and concise (max 2 sentences).
+                - Use the visual input to comment on their current appearance if relevant (smiling, wearing a hat, etc).
             `;
 
             const response = await ai.models.generateContent({
@@ -56,7 +76,7 @@ export const useGemini = () => {
                 properties: {
                     transcript: { type: Type.STRING },
                     emotion: { type: Type.STRING, enum: ["Happy", "Sad", "Angry", "Neutral", "Excited"] },
-                    summary: { type: Type.STRING, description: "A concise 2-sentence summary of what they said" }
+                    summary: { type: Type.STRING, description: "A concise 2-3-sentence summary of what they said" }
                 },
                 required: ["transcript", "emotion", "summary"]
             };
@@ -76,7 +96,7 @@ export const useGemini = () => {
         
                               1. Use the provided transcript as the ground truth.
                               2. Detect the primary emotion.
-                              3. Summarize what was said in 2 sentences.
+                              3. Summarize what was said in 2-3 sentences.
                             ` }
                     ]
                 }],
