@@ -82,6 +82,8 @@ export const FaceProvider = ({ children }) => {
 
     const unknownFrameCountRef = useRef(0);
     const assetsLoadedRef = useRef(false);
+    const pendingMatchRef = useRef(null);
+    const matchCountRef = useRef(0);
 
     // NOTE: Do NOT sync transcriptRef from transcript state!
     // transcriptRef holds ONLY committed text
@@ -90,6 +92,7 @@ export const FaceProvider = ({ children }) => {
     const resetTranscript = () => {
         setTranscript("");
         transcriptRef.current = "";
+        lastPartialRef.current = "";
     };
 
     // Load Large Assets from IndexedDB on Mount
@@ -333,6 +336,7 @@ export const FaceProvider = ({ children }) => {
         console.log("[Scribe] Stopping recording...");
         setIsRecording(false);
         setListening(false);
+        scribeActiveRef.current = false; // Kill switch for event handling
         if (scribeConnectionRef.current) {
             scribeConnectionRef.current.close();
             scribeConnectionRef.current = null;
@@ -420,9 +424,10 @@ export const FaceProvider = ({ children }) => {
             if (currentFaceRef.current) {
                 console.log(`Transition from ${currentFaceRef.current} to Unknown`);
                 const nameToSave = currentFaceRef.current;
-                const transcriptToSave = transcriptRef.current;
+                // Use the most complete text available
+                const transcriptToSave = lastPartialRef.current.trim() || transcriptRef.current.trim();
 
-                if (transcriptToSave.trim().length > 10) {
+                if (transcriptToSave.length > 10) {
                     handleProcessMemory(nameToSave, transcriptToSave);
                 }
 
@@ -471,6 +476,12 @@ export const FaceProvider = ({ children }) => {
         setDeniedConsent(false);
         unknownFrameCountRef.current = 0;
 
+        // Reset face loss timeout if it exists
+        if (faceLossTimeoutRef.current) {
+            clearTimeout(faceLossTimeoutRef.current);
+            faceLossTimeoutRef.current = null;
+        }
+
         if (isConsentOpen) {
             console.log("Known face detected while consent open - closing popup");
             setIsConsentOpen(false);
@@ -478,39 +489,41 @@ export const FaceProvider = ({ children }) => {
         }
 
         if (currentFaceRef.current !== name) {
-            console.log(`Detected: ${name}`);
+            console.log(`[Transition] New person detected: ${name} (Previous: ${currentFaceRef.current})`);
 
-            if (!isRecording) startRecording();
-            stopAudio();
+            // 1. If someone else was here, save their transcript
+            if (currentFaceRef.current) {
+                const prevName = currentFaceRef.current;
+                // Use the most complete text available (including partials)
+                const prevTranscript = lastPartialRef.current.trim() || transcriptRef.current.trim();
 
-            if (isRecording && currentFaceRef.current) {
-                const finalTranscript = transcriptRef.current;
-                // Don't fully stop recording if switching people?
-                // Actually, Scribe Session is one continuous stream usually.
-                // But we want to segment memory.
-                // Let's restart session to be safe/clean? Or just split logic.
-                // For now, restart is safer to ensure clear boundaries.
-                stopRecording();
-                handleProcessMemory(currentFaceRef.current, finalTranscript);
-                startRecording();
-            } else if (!isRecording) {
-                // If not recording, start now
-                startRecording();
+                if (prevTranscript.length > 5) {
+                    console.log(`[Transition] Saving session for ${prevName}: "${prevTranscript}"`);
+                    handleProcessMemory(prevName, prevTranscript);
+                }
             }
 
+            // 2. Stop current session if active (Ensures clean boundaries)
+            if (isRecording || scribeConnectionRef.current) {
+                console.log("[Transition] Stopping previous recording session");
+                stopRecording();
+            }
+
+            // 3. Reset state for the new person
+            resetTranscript();
+            stopAudio();
             setCurrentFace(name);
             currentFaceRef.current = name;
 
+            // 4. Start fresh recording for the new person
+            console.log(`[Transition] Starting new recording session for ${name}`);
+            startRecording();
+
+            // 5. Greet the new person
             const person = knownFaces.find(p => p.name === name);
             const lastMood = person?.history?.slice(-1)[0]?.emotion || "Neutral";
             const greeting = await getGreeting(name, person?.bio, person?.history, lastMood, imageSrc);
-
             speak(greeting);
-        }
-
-        if (faceLossTimeoutRef.current) {
-            clearTimeout(faceLossTimeoutRef.current);
-            faceLossTimeoutRef.current = null;
         }
     };
 
@@ -518,13 +531,15 @@ export const FaceProvider = ({ children }) => {
         if (currentFaceRef.current && isRecording && !faceLossTimeoutRef.current) {
             faceLossTimeoutRef.current = setTimeout(async () => {
                 const nameToProcess = currentFaceRef.current;
-                const finalTranscript = transcriptRef.current;
+                // Use the most complete text available
+                const finalTranscript = lastPartialRef.current.trim() || transcriptRef.current.trim();
 
                 setCurrentFace(null);
                 currentFaceRef.current = null;
                 setLastEmotion(null);
                 stopRecording();
                 stopAudio();
+                resetTranscript(); // Clean reset when face is truly lost
 
                 await handleProcessMemory(nameToProcess, finalTranscript);
             }, 5000);
@@ -541,12 +556,29 @@ export const FaceProvider = ({ children }) => {
                     // but we still need to detect known faces.
                     const match = await detectFace(webcamRef);
                     processingRef.current = false;
-
                     if (match) {
                         if (match.status === 'MATCH') {
                             unknownFrameCountRef.current = 0;
-                            await handleFaceDetected(match.name, match.imageSrc);
+
+                            // Stabilization logic for matches
+                            if (pendingMatchRef.current === match.name) {
+                                matchCountRef.current += 1;
+                                console.log(`[Stabilization] Match ${match.name}: ${matchCountRef.current}/5`);
+
+                                // Only call handler if we have 5 consecutive frames (approx 1.75s)
+                                if (matchCountRef.current >= 5) {
+                                    await handleFaceDetected(match.name, match.imageSrc);
+                                }
+                            } else {
+                                // New match started, reset counter
+                                pendingMatchRef.current = match.name;
+                                matchCountRef.current = 1;
+                            }
                         } else if (match.status === 'UNKNOWN') {
+                            // Reset match stabilization
+                            pendingMatchRef.current = null;
+                            matchCountRef.current = 0;
+
                             // Debounce: Require 5 consecutive frames of unknown
                             unknownFrameCountRef.current += 1;
                             if (unknownFrameCountRef.current > 5) {
@@ -554,7 +586,11 @@ export const FaceProvider = ({ children }) => {
                             }
                         }
                     } else {
+                        // Reset all counters when no face is found
                         unknownFrameCountRef.current = 0;
+                        pendingMatchRef.current = null;
+                        matchCountRef.current = 0;
+
                         handleFaceLost();
 
                         // If consent is open OR denied but no face is visible, reset it
@@ -575,13 +611,15 @@ export const FaceProvider = ({ children }) => {
             if (!isCameraActive) {
                 if (isRecording && currentFaceRef.current) {
                     const nameToSave = currentFaceRef.current;
-                    const transcriptToSave = transcriptRef.current;
-                    if (transcriptToSave.trim().length > 10) {
-                        handleProcessMemory(nameToSave, transcriptToSave);
-                    }
+                    // Use the most complete text available
+                    const finalTranscript = lastPartialRef.current.trim() || transcriptRef.current.trim();
+                    console.log(`[Camera Deactivated] Saving session for ${nameToSave}`);
+                    handleProcessMemory(nameToSave, finalTranscript);
                 }
 
-                if (isRecording) stopRecording();
+                // Full Stop
+                stopRecording();
+                resetTranscript();
                 stopAudio();
                 currentFaceRef.current = null;
                 setCurrentFace(null);
