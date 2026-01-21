@@ -12,8 +12,8 @@ const Sidebar = ({ onClose }) => {
     };
 
     return (
-        <div className="fixed h-screen inset-0 z-50 bg-black/50" onClick={onClose}>
-            <div className="flex flex-col w-[85%] py-10 justify-between h-full p-8 bg-white animate-[slideRight_0.3s_ease-out]" onClick={e => e.stopPropagation()}>
+        <div className="fixed h-screen inset-0 z-50 bg-black/50 backdrop-blur-xl" onClick={onClose}>
+            <div className="flex flex-col w-[85%] max-w-150 justify-between h-full p-5 bg-white animate-[slideRight_0.3s_ease-out]" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-8">
                     <X onClick={onClose} className="cursor-pointer" />
                     <img src={Logo} className='w-40' alt="Logo" />

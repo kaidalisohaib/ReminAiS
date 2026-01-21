@@ -11,17 +11,17 @@ const Connections = () => {
     const { knownFaces } = useFace();
 
     return (
-        <div className="p-5 flex flex-col h-full bg-gray-50">
+        <div className="flex flex-col h-full bg-gray-50">
             {showMenu && <Sidebar onClose={() => setShowMenu(false)} />}
 
             {/* Top Bar */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="p-5 flex items-center justify-between mb-6">
                 <Menu onClick={() => setShowMenu(true)} className="cursor-pointer" />
                 <img src={Logo} className='w-40' alt="Logo" />
                 <Camera onClick={() => navigate('/camera')} className="cursor-pointer" />
             </div>
 
-            <div className="relative flex-1 h-full overflow-hidden">
+            <div className="w-full p-5 max-w-150 mx-auto relative flex-1 h-full overflow-hidden">
                 <h2 className='my-5 text-xl font-bold'>Your connections :</h2>
                 <div className="flex flex-col gap-4 h-full pb-20 overflow-y-auto">
                     {knownFaces.length > 0 ? knownFaces.map((c, i) => (
@@ -67,7 +67,7 @@ const Connections = () => {
                             {/* Action Section */}
                             <div className="w-full sm:w-auto shrink-0 flex items-center mt-3 sm:mt-0 sm:pr-2">
                                 <button
-                                    className="w-full py-3 bg-primary hover:bg-red-600 text-white rounded-2xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-100 hover:shadow-red-200 transition-all active:scale-[0.98] border-b-4 border-red-700"
+                                    className="w-full p-3 bg-primary hover:bg-red-600 text-white rounded-2xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-100 hover:shadow-red-200 transition-all active:scale-[0.98] border-b-4 border-red-700"
                                     onClick={() => navigate(`/history/${c.name}`)}
                                 >
                                     View About
