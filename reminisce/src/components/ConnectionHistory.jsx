@@ -41,15 +41,16 @@ const ConnectionHistory = () => {
     const history = [...(person.history || [])].reverse();
 
     return (
-        <div className="h-full p-6 overflow-y-auto bg-gray-50">
+        <div className="h-full p-5 overflow-y-auto bg-gray-50">
             {showMenu && <Sidebar onClose={() => setShowMenu(false)} />}
 
-            {/* Header */}
+            {/* Top Bar */}
             <div className="flex items-center justify-between mb-6">
-                <Menu onClick={() => setShowMenu(true)} className="cursor-pointer text-gray-700 hover:text-gray-900" />
-                <img src={Logo} className='w-32' alt="Logo" />
-                <Camera onClick={() => navigate('/camera')} className="cursor-pointer text-gray-700 hover:text-gray-900" />
+                <Menu onClick={() => setShowMenu(true)} className="cursor-pointer" />
+                <img src={Logo} className='w-40' alt="Logo" />
+                <Camera onClick={() => navigate('/camera')} className="cursor-pointer" />
             </div>
+
             <div className='max-w-100 mx-auto'>
                 <div className="flex items-center gap-4 mb-8">
                     <div onClick={() => navigate(-1)} className="p-2 bg-white rounded-full shadow-sm cursor-pointer hover:bg-gray-100">

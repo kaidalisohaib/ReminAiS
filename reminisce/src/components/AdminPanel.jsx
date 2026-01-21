@@ -78,7 +78,7 @@ const AdminPanel = () => {
     };
 
     return (
-        <div className="flex flex-col flex-1 h-full p-6 overflow-y-auto bg-gray-50">
+        <div className="flex flex-col flex-1 h-full p-5 overflow-y-auto bg-gray-50">
             {showMenu && <Sidebar onClose={() => setShowMenu(false)} />}
 
             {/* Header */}
